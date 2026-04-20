@@ -1682,6 +1682,143 @@ pub async fn set_node_type(
     Ok(())
 }
 
+/// Parse and canonicalise a remote base node gRPC address.
+///
+/// On success returns the canonical `{scheme}://{host}:{port}` form that
+/// `RemoteNodeAdapter::set_grpc_address` can safely split on `:`. The
+/// function deliberately rejects a superset of what a raw `url::Url::parse`
+/// would accept:
+///
+/// - Scheme must be `http` or `https` (case-insensitive; normalised to
+///   lowercase in the returned string).
+/// - A port is **required** — the adapter panics on `parts[2]` when the
+///   address has no explicit port, so we refuse to persist one without.
+/// - Host must be present.
+/// - Path, query, fragment, username and password are all rejected to
+///   keep the persisted value a bare gRPC endpoint (no `/v1`, no
+///   `user:pass@`, no `?x=y`).
+///
+/// IPv6 literals are preserved in their bracketed form (`[::1]`) so the
+/// canonical string remains parseable.
+fn canonicalise_remote_base_node_address(input: &str) -> Result<String, anyhow::Error> {
+    let parsed = url::Url::parse(input)
+        .map_err(|e| anyhow::anyhow!("Invalid remote base node address {input:?}: {e}"))?;
+
+    let scheme = parsed.scheme().to_ascii_lowercase();
+    if scheme != "http" && scheme != "https" {
+        anyhow::bail!("Invalid remote base node address scheme {scheme:?}: must be http or https");
+    }
+
+    if !parsed.username().is_empty() || parsed.password().is_some() {
+        anyhow::bail!(
+            "Invalid remote base node address {input:?}: userinfo (user:pass@) is not permitted"
+        );
+    }
+
+    let host = parsed
+        .host_str()
+        .filter(|h| !h.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("Invalid remote base node address {input:?}: missing host"))?;
+
+    let port = parsed.port().ok_or_else(|| {
+        anyhow::anyhow!(
+            "Invalid remote base node address {input:?}: an explicit port is required (e.g. :443)"
+        )
+    })?;
+
+    // `url` normalises an empty path to "/" — treat that the same as no path
+    // for the purpose of rejection, but reject anything longer.
+    if !matches!(parsed.path(), "" | "/") {
+        anyhow::bail!(
+            "Invalid remote base node address {input:?}: path segments are not permitted"
+        );
+    }
+    if parsed.query().is_some() {
+        anyhow::bail!(
+            "Invalid remote base node address {input:?}: query strings are not permitted"
+        );
+    }
+    if parsed.fragment().is_some() {
+        anyhow::bail!("Invalid remote base node address {input:?}: fragments are not permitted");
+    }
+
+    // Preserve IPv6 brackets: `url` gives the unbracketed form via `host_str`.
+    let host_for_url = match parsed.host() {
+        Some(url::Host::Ipv6(addr)) => format!("[{addr}]"),
+        _ => host.to_string(),
+    };
+
+    Ok(format!("{scheme}://{host_for_url}:{port}"))
+}
+
+/// Validate a candidate remote base node address without persisting it.
+///
+/// Returns the canonical form the backend would actually store when
+/// `set_remote_base_node_address` is called with the same input. The UI
+/// calls this from the input's blur handler so errors appear inline and
+/// the submitted value matches exactly what the backend will accept.
+///
+/// Empty (or whitespace-only) input resolves to the network-appropriate
+/// default, matching the documented "clear to reset" UX.
+#[tauri::command]
+pub fn validate_remote_base_node_address(address: String) -> Result<String, InvokeError> {
+    let trimmed = address.trim();
+    if trimmed.is_empty() {
+        return Ok(ConfigCoreContent::default().remote_base_node_address().clone());
+    }
+    canonicalise_remote_base_node_address(trimmed).map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command]
+pub async fn set_remote_base_node_address(address: String) -> Result<String, InvokeError> {
+    let timer = Instant::now();
+    info!(target: LOG_TARGET_APP_LOGIC, "[set_remote_base_node_address] called with address: {address:?}");
+
+    // The PR description promises "Clear the field — reverts to default
+    // remote node address". An empty string however is not a valid gRPC
+    // endpoint: persisting it would make the node phase fail to dial on
+    // the next restart and leave the user stuck until they manually
+    // re-enter an address. Substituting the network-appropriate default
+    // from `ConfigCoreContent::default()` preserves the documented
+    // "clear to reset" UX without storing a known-broken value.
+    //
+    // For non-empty input we run the shared canonicaliser, which parses
+    // with `url::Url`, requires a port, rejects path/query/fragment/
+    // userinfo and lower-cases the scheme. The canonical `scheme://host:port`
+    // string is what gets persisted — not the raw user input — so
+    // `RemoteNodeAdapter::set_grpc_address` always sees a well-formed
+    // value that its split-by-colon logic can handle.
+    //
+    // The resolved value is returned to the caller so the frontend store
+    // can mirror the backend without a second round trip: on an empty
+    // input the store needs to end up holding the default address, not
+    // the empty string the user typed.
+    let trimmed_address = address.trim();
+    let resolved = if trimmed_address.is_empty() {
+        ConfigCoreContent::default().remote_base_node_address().clone()
+    } else {
+        canonicalise_remote_base_node_address(trimmed_address).map_err(InvokeError::from_anyhow)?
+    };
+
+    ConfigCore::update_field_requires_restart(
+        ConfigCoreContent::set_remote_base_node_address,
+        resolved.clone(),
+        vec![SetupPhase::Node, SetupPhase::Wallet, SetupPhase::CpuMining],
+    )
+    .await
+    .map_err(InvokeError::from_anyhow)?;
+
+    SetupManager::get_instance()
+        .restart_phases_from_queue()
+        .await;
+
+    if timer.elapsed() > MAX_ACCEPTABLE_COMMAND_TIME {
+        warn!(target: LOG_TARGET_APP_LOGIC, "set_remote_base_node_address took too long: {:?}", timer.elapsed());
+    }
+
+    Ok(resolved)
+}
+
 #[tauri::command]
 pub async fn change_cpu_pool(cpu_pool: String) -> Result<(), InvokeError> {
     let timer = Instant::now();
