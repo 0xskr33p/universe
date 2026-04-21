@@ -22,6 +22,8 @@ import {
     AddressFieldLabel,
     AddressFieldWrapper,
     AddressInput,
+    AddressSettingsGroup,
+    AddressSettingsGroupContent,
 } from './NodeTypeConfiguration.styles.ts';
 
 export default function NodeTypeConfiguration() {
@@ -54,12 +56,14 @@ export default function NodeTypeConfiguration() {
         // Validate via the backend so inline errors use the exact same
         // rules — scheme, explicit port, no path/query/userinfo — that
         // `set_remote_base_node_address` will apply when it persists.
+        // The reason captured here is interpolated into the
+        // `custom-remote-node-address-error` i18n string at render time.
         try {
             await invoke<string>('validate_remote_base_node_address', { address: trimmed });
         } catch (e) {
             const message = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
             console.warn('Remote base node address failed validation:', message);
-            setAddressError(message || t('custom-remote-node-address-error'));
+            setAddressError(message || 'validation failed');
             return;
         }
 
@@ -68,9 +72,9 @@ export default function NodeTypeConfiguration() {
             await setRemoteBaseNodeAddress(trimmed);
         } catch (e) {
             const message = typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
-            setAddressError(message || t('custom-remote-node-address-error'));
+            setAddressError(message || 'validation failed');
         }
-    }, [addressInput, remote_base_node_address, t]);
+    }, [addressInput, remote_base_node_address]);
 
     const handleAddressChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         setAddressInput(e.target.value);
@@ -120,8 +124,8 @@ export default function NodeTypeConfiguration() {
                 </SettingsGroupAction>
             </SettingsGroup>
             {showAddressInput && (
-                <SettingsGroup style={{ paddingTop: 0 }}>
-                    <SettingsGroupContent style={{ width: '100%' }}>
+                <AddressSettingsGroup>
+                    <AddressSettingsGroupContent>
                         <AddressFieldWrapper>
                             <AddressFieldLabel htmlFor={addressInputId}>
                                 {t('custom-remote-node-address')}
@@ -144,12 +148,12 @@ export default function NodeTypeConfiguration() {
                             />
                             {addressError && (
                                 <AddressErrorMessage id={addressErrorId} role="alert">
-                                    {t('custom-remote-node-address-error')}
+                                    {t('custom-remote-node-address-error', { reason: addressError })}
                                 </AddressErrorMessage>
                             )}
                         </AddressFieldWrapper>
-                    </SettingsGroupContent>
-                </SettingsGroup>
+                    </AddressSettingsGroupContent>
+                </AddressSettingsGroup>
             )}
         </SettingsGroupWrapper>
     );
