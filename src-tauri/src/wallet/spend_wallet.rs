@@ -346,4 +346,8 @@ impl ProcessAdapter for SpendWallet {
     fn pid_file_name(&self) -> &str {
         "spend_wallet.pid"
     }
+
+    fn binary_kind(&self) -> Binaries {
+        Binaries::Wallet
+    }
 }

@@ -179,6 +179,10 @@ impl ProcessAdapter for XmrigAdapter {
     fn pid_file_name(&self) -> &str {
         "xmrig_pid"
     }
+
+    fn binary_kind(&self) -> crate::binaries::Binaries {
+        crate::binaries::Binaries::Xmrig
+    }
 }
 
 // This is a flag to indicate if the fallback to solo mining has been triggered

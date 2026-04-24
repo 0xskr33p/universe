@@ -456,4 +456,8 @@ impl ProcessAdapter for WalletAdapter {
     fn pid_file_name(&self) -> &str {
         "wallet_pid"
     }
+
+    fn binary_kind(&self) -> crate::binaries::Binaries {
+        crate::binaries::Binaries::Wallet
+    }
 }

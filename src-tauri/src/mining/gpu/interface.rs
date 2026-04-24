@@ -165,4 +165,9 @@ impl ProcessAdapter for GpuMinerInterface {
             GpuMinerInterface::LolMiner(miner) => miner.pid_file_name(),
         }
     }
+    fn binary_kind(&self) -> crate::binaries::Binaries {
+        match self {
+            GpuMinerInterface::LolMiner(miner) => miner.binary_kind(),
+        }
+    }
 }

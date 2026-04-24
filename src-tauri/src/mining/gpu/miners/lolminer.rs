@@ -293,6 +293,10 @@ impl ProcessAdapter for LolMinerGpuMiner {
     fn pid_file_name(&self) -> &str {
         "lolminer_pid"
     }
+
+    fn binary_kind(&self) -> Binaries {
+        Binaries::LolMiner
+    }
 }
 
 #[derive(Clone)]

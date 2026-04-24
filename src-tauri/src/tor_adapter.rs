@@ -312,6 +312,10 @@ impl ProcessAdapter for TorAdapter {
     fn pid_file_name(&self) -> &str {
         "tor_pid"
     }
+
+    fn binary_kind(&self) -> crate::binaries::Binaries {
+        crate::binaries::Binaries::Tor
+    }
 }
 
 #[derive(Clone)]

@@ -178,6 +178,10 @@ impl ProcessAdapter for MergeMiningProxyAdapter {
     fn pid_file_name(&self) -> &str {
         "mmproxy_pid"
     }
+
+    fn binary_kind(&self) -> crate::binaries::Binaries {
+        crate::binaries::Binaries::MergeMiningProxy
+    }
 }
 
 #[derive(Clone)]

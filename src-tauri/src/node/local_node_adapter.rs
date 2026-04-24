@@ -422,4 +422,8 @@ impl ProcessAdapter for LocalNodeAdapter {
     fn pid_file_name(&self) -> &str {
         "node_pid"
     }
+
+    fn binary_kind(&self) -> crate::binaries::Binaries {
+        crate::binaries::Binaries::MinotariNode
+    }
 }

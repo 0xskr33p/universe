@@ -205,6 +205,10 @@ impl ProcessAdapter for RemoteNodeAdapter {
     fn pid_file_name(&self) -> &str {
         "remote_node_pid"
     }
+
+    fn binary_kind(&self) -> crate::binaries::Binaries {
+        crate::binaries::Binaries::MinotariNode
+    }
 }
 
 pub struct NullProcessInstance {
