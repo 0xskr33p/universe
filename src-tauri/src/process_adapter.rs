@@ -37,7 +37,7 @@ use tokio::task::JoinHandle;
 use tokio_util::task::TaskTracker;
 
 use crate::LOG_TARGET_APP_LOGIC;
-use crate::binaries::{BinaryResolver, Binaries};
+use crate::binaries::{Binaries, BinaryResolver};
 use crate::download_utils::set_permissions;
 use crate::events::CriticalProblemPayload;
 use crate::events_emitter::EventsEmitter;
