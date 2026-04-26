@@ -23,7 +23,7 @@
 use anyhow::{Error, anyhow};
 use async_trait::async_trait;
 use futures_util::future::FusedFuture;
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -106,17 +106,17 @@ pub(crate) trait ProcessAdapter {
         sys.refresh_processes(ProcessesToUpdate::All);
 
         let target = Self::canonicalize_path_lossy(binary_path);
+        let target_file_name = target.file_name();
 
         for (pid, process) in sys.processes() {
-            match process.exe() {
-                Some(exe_path) => {
+            if let Some(exe_path) = process.exe() {
+                // Optimization: only canonicalize if the file names match,
+                // to avoid an expensive syscall for every process on the system.
+                if exe_path.file_name() == target_file_name {
                     let candidate = Self::canonicalize_path_lossy(exe_path);
                     if candidate == target {
                         return Some(pid.as_u32());
                     }
-                }
-                None => {
-                    debug!(target: LOG_TARGET_APP_LOGIC, "Skipping process {} - exe path is unavailable (likely permission denied or kernel/zombie process)", pid.as_u32());
                 }
             }
         }
